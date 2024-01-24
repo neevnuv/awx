@@ -7,7 +7,7 @@ class CredentialInputSource(base.Base):
     pass
 
 
-page.register_page([resources.credential_input_source], (resources.credential_input_sources, 'post'), CredentialInputSource)
+page.register_page([resources.credential_input_source, (resources.credential_input_sources, 'post')], CredentialInputSource)
 
 
 class CredentialInputSources(page.PageList, CredentialInputSource):
