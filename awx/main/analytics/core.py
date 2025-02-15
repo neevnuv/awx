@@ -16,10 +16,12 @@ from rest_framework.exceptions import PermissionDenied
 import requests
 
 from awx.conf.license import get_license
+
+from ansible_base.lib.utils.db import advisory_lock
+
 from awx.main.models import Job
 from awx.main.access import access_registry
 from awx.main.utils import get_awx_http_client_headers, set_environ, datetime_hook
-from awx.main.utils.pglock import advisory_lock
 
 __all__ = ['register', 'gather', 'ship']
 
@@ -181,7 +183,10 @@ def gather(dest=None, module=None, subset=None, since=None, until=None, collecti
             logger.log(log_level, "Automation Analytics not enabled. Use --dry-run to gather locally without sending.")
             return None
 
-        if not (settings.AUTOMATION_ANALYTICS_URL and settings.REDHAT_USERNAME and settings.REDHAT_PASSWORD):
+        if not (
+            settings.AUTOMATION_ANALYTICS_URL
+            and ((settings.REDHAT_USERNAME and settings.REDHAT_PASSWORD) or (settings.SUBSCRIPTIONS_USERNAME and settings.SUBSCRIPTIONS_PASSWORD))
+        ):
             logger.log(log_level, "Not gathering analytics, configuration is invalid. Use --dry-run to gather locally without sending.")
             return None
 
@@ -361,14 +366,22 @@ def ship(path):
     if not url:
         logger.error('AUTOMATION_ANALYTICS_URL is not set')
         return False
+
     rh_user = getattr(settings, 'REDHAT_USERNAME', None)
     rh_password = getattr(settings, 'REDHAT_PASSWORD', None)
+
+    if not rh_user or not rh_password:
+        logger.info('REDHAT_USERNAME and REDHAT_PASSWORD are not set, using SUBSCRIPTIONS_USERNAME and SUBSCRIPTIONS_PASSWORD')
+        rh_user = getattr(settings, 'SUBSCRIPTIONS_USERNAME', None)
+        rh_password = getattr(settings, 'SUBSCRIPTIONS_PASSWORD', None)
+
     if not rh_user:
-        logger.error('REDHAT_USERNAME is not set')
+        logger.error('REDHAT_USERNAME and SUBSCRIPTIONS_USERNAME are not set')
         return False
     if not rh_password:
-        logger.error('REDHAT_PASSWORD is not set')
+        logger.error('REDHAT_PASSWORD and SUBSCRIPTIONS_USERNAME are not set')
         return False
+
     with open(path, 'rb') as f:
         files = {'file': (os.path.basename(path), f, settings.INSIGHTS_AGENT_MIME)}
         s = requests.Session()
